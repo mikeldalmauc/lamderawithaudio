@@ -13,6 +13,7 @@ import Effect.Lamdera
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Browser.Navigation
+import Effect.Time as Time
 import Effect.Task
 import Effect.Time
 import PingData
@@ -21,7 +22,13 @@ import Duration exposing (Duration)
 import Ports
 import Effect.Browser.Dom exposing (Element)
 import Element as El exposing (layout)
+import Element.Input as EI
+import Element.Events as EV
 import AssocList
+import Sound exposing (Sound(..))
+import Random
+import LoadingPage
+import Effect.WebGL.Texture exposing (Texture)
 
 app :
     { init : Url -> Lamdera.Key -> ( Audio.Model FrontendMsg_ FrontendModel_, Cmd (Audio.Msg FrontendMsg_) )
@@ -104,7 +111,8 @@ audioLoaded audioData model =
 
 
     in
-       Audio.silence
+        playSound model.music.sound model.music.startTime |> Audio.scaleVolume 0.5
+
 
 
 maxVolumeDistance : number
@@ -123,9 +131,11 @@ init url key =
         , sounds = AssocList.empty
         , musicVolume = 0
         , soundEffectVolume = 0
+        , time = Nothing
+        , texture = Nothing
         }
     , Command.batch []
-    ,  Audio.cmdNone
+    , Audio.cmdNone
     )
 
 
@@ -133,8 +143,8 @@ update : AudioData -> FrontendMsg_ -> FrontendModel_ -> ( FrontendModel_, Comman
 update audioData msg model =
     case model of
         Loading loadingModel ->
-           ( Loading loadingModel, Command.none, Audio.cmdNone)
-            
+            LoadingPage.update msg loadingModel
+
         Loaded frontendLoaded ->
             updateLoaded audioData msg frontendLoaded
             |>  (\( newModel, cmd ) ->
@@ -169,6 +179,11 @@ updateLoaded audioData msg model =
         SoundLoaded sound result ->
             ( { model | sounds = AssocList.insert sound result model.sounds }, Command.none )
 
+        TextureLoaded _ ->
+            ( model, Command.none )
+
+
+
 
 updateFromBackend : ToFrontend -> FrontendModel_ -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_ )
 updateFromBackend msg model =
@@ -177,7 +192,19 @@ updateFromBackend msg model =
             (Loading loading, Command.none )
 
         ( Loaded loaded, _ ) ->
-            (Loaded loaded, Command.none )
+            updateLoadedFromBackend msg loaded
+                |> Tuple.mapFirst Loaded
+
+        _ ->
+            (model, Command.none )
+
+updateLoadedFromBackend : ToFrontend -> FrontendLoaded -> ( FrontendLoaded, Command FrontendOnly ToBackend FrontendMsg_ )
+updateLoadedFromBackend msg model =
+    case msg of
+        PingResponse serverTime ->
+            (model, Command.none )
+        _ -> 
+            (model, Command.none )
 
 
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_
@@ -203,7 +230,13 @@ view audioData model =
 loadingView : Html FrontendMsg_
 loadingView = 
     El.layout []
-        <| El.el [El.centerX, El.centerY] <| El.text "loading"
+        <| El.row []
+            [El.el [El.centerX, El.centerY] <| El.text "loading"
+            , EI.button [ EV.onClick  NoOpFrontendMsg]  
+                    { onPress = Just NoOpFrontendMsg
+                    , label = El.text "Run" 
+                    }
+            ]
 
 
 loadedView : AudioData -> FrontendLoaded ->  Html FrontendMsg_

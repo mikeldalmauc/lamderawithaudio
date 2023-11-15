@@ -30,10 +30,13 @@ update msg model =
     case msg of
         NoOpBackendMsg ->
             ( model, Cmd.none )
-
+        
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
 updateFromFrontend sessionId clientId msg model =
     case msg of
         NoOpToBackend ->
             ( model, Cmd.none )
+
+        PingRequest ->
+            ( model,  Cmd.none)
